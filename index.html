@@ -1,0 +1,1449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Air Force: Global Conflict — Neon Frontier Edition</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700;900&family=Orbitron:wght@500;700;900&display=swap');
+
+        * {
+            user-select: none;
+            -webkit-user-select: none;
+            box-sizing: border-box;
+        }
+
+        html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            min-height: 100%;
+            overflow-x: hidden;
+            overflow-y: auto;
+            background-color: #030712;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            min-height: 100vh;
+            height: auto;
+            overflow: visible;
+            background-color: #030712;
+            font-family: 'Chakra Petch', sans-serif;
+        }
+
+        /* Preserve the original game layout while allowing scrolling on
+           short screens and at high zoom levels. */
+        #gameStage {
+            position: relative;
+            width: 100%;
+            height: max(100vh, 620px);
+            min-height: 620px;
+            overflow: hidden;
+            isolation: isolate;
+        }
+
+        .font-orbitron {
+            font-family: 'Orbitron', sans-serif;
+        }
+
+        /* Tactical Military HUD Frame */
+        .military-hud {
+            background: linear-gradient(135deg, rgba(8, 15, 30, 0.85) 0%, rgba(3, 7, 18, 0.9) 100%);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(167, 139, 250, 0.3);
+            box-shadow: 0 0 20px rgba(167, 139, 250, 0.15), inset 0 0 10px rgba(167, 139, 250, 0.05);
+        }
+
+        .hud-border-amber {
+            border-color: rgba(245, 158, 11, 0.4);
+            box-shadow: 0 0 20px rgba(245, 158, 11, 0.15);
+        }
+
+        /* Screen Shake Animation */
+        .shake-screen {
+            animation: shake 0.22s cubic-bezier(.36,.07,.19,.97) both;
+        }
+
+        @keyframes shake {
+            10%, 90% { transform: translate3d(-3px, 1px, 0); }
+            20%, 80% { transform: translate3d(4px, -3px, 0); }
+            30%, 50%, 70% { transform: translate3d(-6px, 4px, 0); }
+            40%, 60% { transform: translate3d(6px, -2px, 0); }
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: rgba(0,0,0,0.4); }
+        ::-webkit-scrollbar-thumb { background: #a78bfa; border-radius: 2px; }
+
+        /* Neon Frontier violet / magenta theme */
+        :root { color-scheme: dark; }
+        body, html { background-color:#080914; }
+        .military-hud { background:linear-gradient(135deg,rgba(20,14,40,.91),rgba(8,9,20,.94)); border-color:rgba(167,139,250,.42); box-shadow:0 0 22px rgba(124,58,237,.16), inset 0 0 12px rgba(192,38,211,.06); }
+        ::-webkit-scrollbar-thumb { background:#a78bfa; }
+        button { transition: filter .15s ease, transform .15s ease; }
+        button:hover { filter:brightness(1.12); }
+        #gameCanvas { background:#101326; }
+    </style>
+</head>
+<body>
+    <main id="gameStage">
+
+    <!-- Game Canvas -->
+    <canvas id="gameCanvas" class="absolute inset-0 w-full h-full block z-0"></canvas>
+
+    <!-- Military Action HUD Overlay -->
+    <div id="hud" class="absolute inset-0 z-10 pointer-events-none p-3 md:p-6 flex flex-col justify-between hidden">
+        
+        <!-- Top Bar HUD -->
+        <div class="flex flex-wrap justify-between items-start gap-2 md:gap-4">
+          <div class="military-hud rounded-xl p-2 pointer-events-auto">
+            <div class="text-[9px] text-slate-400 font-orbitron">CREDITS</div>
+            <div class="text-amber-300 font-orbitron font-bold">🪙 <span id="hudCoins">0</span></div>
+            <button id="pauseGame" class="mt-1 px-3 py-1 rounded bg-slate-800 border border-violet-500/40 text-violet-200 text-[10px] font-orbitron">Ⅱ PAUSE</button>
+          </div>
+
+            
+            <!-- Health & Armor Panel -->
+            <div class="military-hud rounded-xl p-3 w-48 md:w-64 border-l-4 border-l-violet-400">
+                <div class="flex justify-between items-center mb-1">
+                    <span class="text-[10px] md:text-xs uppercase font-orbitron tracking-widest text-violet-300 font-bold">WARPLANE HULL</span>
+                    <span id="hpText" class="text-xs md:text-sm font-black font-orbitron text-violet-400">100%</span>
+                </div>
+                <div class="w-full bg-slate-900/90 h-3 rounded-md overflow-hidden p-0.5 border border-violet-500/30">
+                    <div id="hpBar" class="h-full bg-gradient-to-r from-violet-500 via-fuchsia-400 to-emerald-400 rounded transition-all duration-150" style="width: 100%;"></div>
+                </div>
+
+                <!-- Missile Ordnance Stock -->
+                <div class="flex justify-between items-center mt-2.5">
+                    <span class="text-[10px] uppercase font-orbitron tracking-wider text-amber-400">MISSILES:</span>
+                    <span id="missileCount" class="text-xs font-bold font-orbitron text-amber-300">5 / 5</span>
+                </div>
+            </div>
+
+            <!-- Current Era & Objective -->
+            <div class="military-hud rounded-xl px-4 py-2 md:py-3 text-center border-t-2 border-t-violet-400 min-w-[200px]">
+                <div class="text-[9px] md:text-[10px] uppercase font-orbitron tracking-widest text-slate-400">WARFARE ERA</div>
+                <div id="eraTitle" class="text-sm md:text-xl font-black font-orbitron text-violet-400 tracking-wider">ERA 1: WWI WARPLANE & DREADNOUGHTS</div>
+                <div id="eraProgressText" class="text-[10px] md:text-xs font-bold text-amber-400 mt-0.5">NEXT ERA AT: 1,500 PTS</div>
+            </div>
+
+            <div class="military-hud rounded-xl px-3 py-2 min-w-[150px] max-w-[230px]">
+              <div class="text-[9px] text-fuchsia-300 font-orbitron tracking-widest">MISSION OBJECTIVE</div>
+              <div id="missionText" class="text-xs text-white font-bold mt-1">Destroy 10 enemy aircraft</div>
+              <div class="w-full h-1.5 bg-slate-900 rounded mt-2 overflow-hidden"><div id="missionBar" class="h-full bg-gradient-to-r from-violet-500 to-fuchsia-400" style="width:0%"></div></div>
+              <div class="text-[9px] text-amber-300 mt-1 font-orbitron">COMBO <span id="comboText">x0</span> · BOSSES <span id="bossCount">0</span></div>
+            </div>
+
+            <!-- Score & Kills -->
+            <div class="military-hud rounded-xl p-3 w-40 md:w-56 text-right border-r-4 border-r-amber-400">
+                <div class="text-[10px] md:text-xs uppercase font-orbitron tracking-widest text-amber-400 font-bold">COMBAT SCORE</div>
+                <div id="scoreDisplay" class="text-xl md:text-3xl font-black font-orbitron text-amber-400 tracking-wider">000,000</div>
+                <div class="text-[10px] text-slate-400 mt-0.5">WARSHIPS SUNK: <span id="shipsSunkText" class="text-violet-300 font-bold">0</span></div>
+            </div>
+        </div>
+
+        <!-- Touch Controls for Mobile Devices -->
+        <div id="touchControls" class="pointer-events-auto flex justify-between items-end md:hidden w-full px-1 pb-1">
+            <!-- Virtual Touch Joystick -->
+            <div id="joystickZone" class="w-28 h-28 rounded-full bg-violet-500/10 border-2 border-violet-400/40 relative flex items-center justify-center touch-none">
+                <div id="joystickKnob" class="w-10 h-10 rounded-full bg-violet-400/50 border border-violet-200 pointer-events-none"></div>
+            </div>
+
+            <!-- Action Touch Buttons -->
+            <div class="flex gap-2">
+                <button id="btnMissile" class="w-14 h-14 rounded-full bg-amber-500/30 border-2 border-amber-400 text-amber-300 font-orbitron text-[10px] font-black active:scale-95 flex flex-col items-center justify-center backdrop-blur-md">
+                    <span>ROCKET</span>
+                    <span id="btnMissileCount" class="text-[9px] text-amber-200">5</span>
+                </button>
+                <button id="btnFire" class="w-16 h-16 rounded-full bg-violet-500/40 border-2 border-violet-300 text-violet-100 font-orbitron text-xs font-black active:scale-95 flex items-center justify-center backdrop-blur-md shadow-[0_0_20px_rgba(167,139,250,0.4)]">
+                    FIRE
+                </button>
+            </div>
+        </div>
+
+        <!-- Desktop Controls Legend -->
+        <div class="hidden md:flex justify-center items-center gap-6 text-xs text-slate-300 font-orbitron bg-slate-950/80 py-2 px-6 rounded-full mx-auto border border-slate-800 backdrop-blur-md">
+            <span><strong class="text-violet-400">MOVE:</strong> WASD / ARROWS</span>
+            <span>•</span>
+            <span><strong class="text-violet-400">CANNON:</strong> SPACE / AUTO</span>
+            <span>•</span>
+            <span><strong class="text-amber-400">HEAVY MISSILE:</strong> E / SHIFT</span>
+            <span>•</span>
+            <span><strong class="text-violet-400">TARGETS:</strong> AIR WARPLANES & NAVAL WARSHIPS</span>
+        </div>
+    </div>
+
+    <!-- Start / Deployment Screen -->
+    <div id="startScreen" class="absolute inset-0 z-20 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md">
+        <div class="max-w-xl w-full military-hud p-6 md:p-8 rounded-2xl border-2 border-violet-500/50 text-center shadow-[0_0_60px_rgba(167,139,250,0.2)]">
+            
+            <div class="inline-block px-3 py-1 rounded-full bg-violet-500/10 border border-violet-400/40 text-violet-400 font-orbitron text-xs tracking-widest mb-3">
+                MK CREATIVE AGENCY • COMBAT SIMULATOR
+            </div>
+
+            <h1 class="text-3xl md:text-5xl font-black font-orbitron text-transparent bg-clip-text bg-gradient-to-r from-violet-400 via-fuchsia-200 to-amber-300 mb-1 tracking-wide uppercase">
+                AIR FORCE
+            </h1>
+            <h2 class="text-xs md:text-base font-bold font-orbitron text-amber-400 tracking-[0.3em] mb-5 border-b border-slate-800 pb-3">
+                GLOBAL CONFLICT: NAVAL & AERIAL COMBAT
+            </h2>
+
+            <p class="text-slate-300 text-xs md:text-sm leading-relaxed mb-6 font-medium">
+                Pilot warplanes through 4 intense historical eras! Destroy enemy fighter squadrons in the sky and bomb heavy naval warships sailing on the ocean below while dodging anti-air SAM missiles.
+            </p>
+
+            <!-- Warfare Eras Overview -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-6 text-left">
+                <div class="bg-slate-900/90 p-2.5 rounded-lg border border-slate-800">
+                    <div class="text-[9px] text-violet-400 font-orbitron font-bold">ERA I (1914)</div>
+                    <div class="text-xs font-bold text-slate-200">Biplanes & Dreadnoughts</div>
+                </div>
+                <div class="bg-slate-900/90 p-2.5 rounded-lg border border-slate-800">
+                    <div class="text-[9px] text-violet-400 font-orbitron font-bold">ERA II (1942)</div>
+                    <div class="text-xs font-bold text-slate-200">WWII Fighters & Battleships</div>
+                </div>
+                <div class="bg-slate-900/90 p-2.5 rounded-lg border border-slate-800">
+                    <div class="text-[9px] text-violet-400 font-orbitron font-bold">ERA III (1980)</div>
+                    <div class="text-xs font-bold text-slate-200">Jets & Destroyers</div>
+                </div>
+                <div class="bg-slate-900/90 p-2.5 rounded-lg border border-slate-800">
+                    <div class="text-[9px] text-amber-400 font-orbitron font-bold">ERA IV (FUTURE)</div>
+                    <div class="text-xs font-bold text-amber-200">Cyber Jets & Plasma Carriers</div>
+                </div>
+            </div>
+
+            <button id="btnStart" class="w-full py-4 rounded-xl font-orbitron font-black text-base md:text-lg bg-gradient-to-r from-violet-400 via-fuchsia-500 to-blue-600 hover:from-violet-300 hover:to-blue-500 text-slate-950 tracking-wider shadow-[0_0_30px_rgba(167,139,250,0.5)] transition-all duration-200 transform hover:scale-[1.02] active:scale-95 cursor-pointer uppercase">
+                DEPLOY TO NAVAL THEATER
+            </button>
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-3">
+              <button id="openShop" class="py-3 rounded-lg font-orbitron text-xs font-bold border border-violet-400/50 bg-violet-950/60 text-violet-200">✈ AIRCRAFT HANGAR</button>
+              <button id="openRewards" class="py-3 rounded-lg font-orbitron text-xs font-bold border border-amber-400/50 bg-amber-950/50 text-amber-200">🎁 DAILY REWARDS</button>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3 text-left">
+              <label class="rounded-lg border border-violet-400/30 bg-slate-900/70 p-3 text-xs text-slate-300 font-orbitron">DIFFICULTY
+                <select id="difficultySelect" class="mt-2 w-full rounded bg-slate-950 border border-violet-400/40 p-2 text-violet-200"><option value="easy">CADET — EASY</option><option value="normal" selected>ACE — NORMAL</option><option value="hard">VETERAN — HARD</option></select>
+              </label>
+              <div class="rounded-lg border border-violet-400/30 bg-slate-900/70 p-3 text-xs text-slate-300 font-orbitron">PERSONAL BEST <div class="text-amber-300 text-lg mt-1" id="menuBestScore">0</div></div>
+            </div>
+            <div class="grid grid-cols-2 gap-2 mt-2">
+              <button id="openStats" class="py-2 rounded-lg border border-violet-400/40 bg-violet-950/50 text-violet-200 text-xs font-orbitron">📊 STATISTICS & MEDALS</button>
+              <button id="openSettings" class="py-2 rounded-lg border border-fuchsia-400/40 bg-fuchsia-950/40 text-fuchsia-200 text-xs font-orbitron">⚙ SETTINGS</button>
+            </div>
+            <div class="mt-4 text-amber-300 font-orbitron text-sm">🪙 AVAILABLE CREDITS: <strong id="menuCoins">0</strong></div>
+
+        </div>
+    </div>
+
+
+    <div id="shopModal" class="fixed inset-0 z-40 hidden items-center justify-center p-4 bg-slate-950/95 backdrop-blur-md">
+      <div class="military-hud w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-2xl p-5">
+        <div class="flex justify-between items-start"><div><p class="text-violet-400 text-xs font-orbitron">MK CREATIVE AGENCY</p><h2 class="text-2xl font-black font-orbitron text-white">AIRCRAFT HANGAR</h2><p class="text-slate-400 text-sm">Unlock aircraft, then select your active fighter.</p></div><button class="closePanel text-2xl text-white" data-panel="shopModal">×</button></div>
+        <p class="text-amber-300 font-orbitron my-3">YOUR CREDITS: 🪙 <span id="shopCoins">0</span></p>
+        <div id="aircraftGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"></div>
+        <div class="mt-5 border-t border-violet-400/20 pt-4"><h3 class="font-orbitron text-lg text-fuchsia-200">AIRCRAFT SYSTEM UPGRADES</h3><p class="text-slate-400 text-xs mt-1">Permanent upgrades are saved on this browser.</p><div id="upgradeGrid" class="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-3"></div></div>
+        <p class="text-slate-500 text-xs mt-4">Progress is saved in this browser on this device.</p>
+      </div>
+    </div>
+    <div id="rewardsModal" class="fixed inset-0 z-40 hidden items-center justify-center p-4 bg-slate-950/95 backdrop-blur-md">
+      <div class="military-hud w-full max-w-xl rounded-2xl p-5">
+        <div class="flex justify-between"><h2 class="text-2xl font-black font-orbitron text-white">DAILY REWARDS</h2><button class="closePanel text-2xl text-white" data-panel="rewardsModal">×</button></div>
+        <p class="text-slate-400 text-sm my-3">Claim a daily bonus and build your seven-day streak.</p>
+        <div id="rewardDays" class="grid grid-cols-4 sm:grid-cols-7 gap-2 mb-4"></div>
+        <p id="rewardStatus" class="text-center text-violet-200 text-sm mb-3"></p>
+        <button id="claimDaily" class="w-full py-3 rounded-xl bg-amber-400 text-slate-950 font-orbitron font-black">CLAIM DAILY REWARD</button>
+      </div>
+    </div>
+    <div id="statsModal" class="fixed inset-0 z-40 hidden items-center justify-center p-4 bg-slate-950/95 backdrop-blur-md"><div class="military-hud w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl p-5"><div class="flex justify-between items-center"><h2 class="text-2xl font-black font-orbitron text-white">PILOT RECORD</h2><button class="closePanel text-2xl text-white" data-panel="statsModal">×</button></div><div id="statsGrid" class="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-4"></div><h3 class="font-orbitron text-fuchsia-200 mt-5 mb-2">MEDALS & ACHIEVEMENTS</h3><div id="achievementGrid" class="grid grid-cols-1 sm:grid-cols-2 gap-2"></div></div></div>
+    <div id="settingsModal" class="fixed inset-0 z-40 hidden items-center justify-center p-4 bg-slate-950/95 backdrop-blur-md"><div class="military-hud w-full max-w-md rounded-2xl p-5"><div class="flex justify-between items-center"><h2 class="text-2xl font-black font-orbitron text-white">GAME SETTINGS</h2><button class="closePanel text-2xl text-white" data-panel="settingsModal">×</button></div><div class="space-y-4 mt-5 text-sm text-slate-200"><label class="flex items-center justify-between">Sound effects <input id="soundToggle" type="checkbox" checked class="accent-violet-500 w-5 h-5"></label><label class="flex items-center justify-between">Screen shake <input id="shakeToggle" type="checkbox" checked class="accent-violet-500 w-5 h-5"></label><label class="flex items-center justify-between">Reduced visual effects <input id="reducedFxToggle" type="checkbox" class="accent-violet-500 w-5 h-5"></label><p class="text-xs text-slate-500">Settings and progress are stored locally in this browser.</p></div></div></div>
+
+    <div id="pauseOverlay" class="fixed inset-0 z-30 hidden items-center justify-center bg-slate-950/80 p-4">
+      <div class="military-hud rounded-2xl p-8 text-center max-w-sm w-full"><h2 class="text-3xl text-white font-black font-orbitron my-4">MISSION PAUSED</h2><button id="resumeGame" class="w-full py-3 rounded-xl bg-violet-400 text-slate-950 font-orbitron font-black">RESUME MISSION</button><button id="pauseToHangar" class="w-full py-3 mt-2 rounded-xl border border-slate-600 text-slate-200 font-orbitron">RETURN TO HANGAR</button></div>
+    </div>
+
+    <!-- Mission Failed / Game Over Screen -->
+    <div id="gameOverScreen" class="absolute inset-0 z-20 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md hidden">
+        <div class="max-w-md w-full military-hud hud-border-amber p-6 md:p-8 rounded-2xl text-center">
+            
+            <div class="text-red-500 font-orbitron text-xs font-bold tracking-widest mb-1">AIRCRAFT DESTROYED</div>
+            <h2 class="text-3xl md:text-4xl font-black font-orbitron text-red-500 mb-5 tracking-wide">
+                MISSION FAILED
+            </h2>
+
+            <div class="bg-slate-900/90 rounded-xl p-4 border border-slate-800 mb-6 text-left space-y-3 font-orbitron">
+                <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+                    <span class="text-xs text-slate-400">FINAL COMBAT SCORE</span>
+                    <span id="finalScore" class="text-xl font-bold text-amber-400">0</span>
+                </div>
+                <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+                    <span class="text-xs text-slate-400">ERA REACHED</span>
+                    <span id="finalEra" class="text-xs font-bold text-violet-400">ERA 1</span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-xs text-slate-400">NAVAL SHIPS SUNK</span>
+                    <span id="finalShipsSunk" class="text-sm font-bold text-emerald-400">0</span>
+                </div>
+            </div>
+
+            <button id="btnRestart" class="w-full py-3.5 rounded-xl font-orbitron font-bold text-base bg-gradient-to-r from-red-500 via-amber-500 to-amber-600 hover:from-red-400 hover:to-amber-500 text-slate-950 tracking-wider shadow-[0_0_25px_rgba(239,68,68,0.5)] transition-all duration-200 transform hover:scale-[1.02] active:scale-95 cursor-pointer">
+                REDEPLOY WARPLANE
+            </button>
+        </div>
+    </div>
+
+    <!-- JavaScript Game Engine -->
+    <script>
+        /**
+         * AIR FORCE: GLOBAL CONFLICT - NAVAL & AERIAL COMBAT ENGINE
+         * Single-file Pure HTML5 Canvas, Web Audio API, and Vanilla JS
+         */
+
+        // --- WEB AUDIO SYNTHESIZER (No External Sound Files) ---
+        class SoundEngine {
+            constructor() {
+                this.ctx = null;
+                this.initialized = false;
+            }
+
+            init() {
+                if (this.initialized) return;
+                try {
+                    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                    this.ctx = new AudioCtx();
+                    this.initialized = true;
+                } catch (e) {
+                    console.warn('Web Audio API initialized with warning', e);
+                }
+            }
+
+            // Heavy Machine Gun Fire
+            playMachineGun() {
+                if (!this.initialized) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(450, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(80, this.ctx.currentTime + 0.06);
+
+                gain.gain.setValueAtTime(0.18, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.06);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.06);
+            }
+
+            // Heavy Anti-Air (AA) Rocket Launch
+            playMissileLaunch() {
+                if (!this.initialized) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(150, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(600, this.ctx.currentTime + 0.25);
+
+                gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+                gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.25);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.25);
+            }
+
+            // Naval / Aerial Explosion
+            playExplosion(isWarship = false) {
+                if (!this.initialized) return;
+                const duration = isWarship ? 0.6 : 0.3;
+                const bufferSize = this.ctx.sampleRate * duration;
+                const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+                const data = buffer.getChannelData(0);
+
+                for (let i = 0; i < bufferSize; i++) {
+                    data[i] = Math.random() * 2 - 1;
+                }
+
+                const noise = this.ctx.createBufferSource();
+                noise.buffer = buffer;
+
+                const filter = this.ctx.createBiquadFilter();
+                filter.type = 'lowpass';
+                filter.frequency.setValueAtTime(isWarship ? 200 : 450, this.ctx.currentTime);
+                filter.frequency.linearRampToValueAtTime(40, this.ctx.currentTime + duration);
+
+                const gain = this.ctx.createGain();
+                gain.gain.setValueAtTime(isWarship ? 0.5 : 0.25, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+
+                noise.connect(filter);
+                filter.connect(gain);
+                gain.connect(this.ctx.destination);
+
+                noise.start();
+                noise.stop(this.ctx.currentTime + duration);
+            }
+
+            // Era Level-Up Fanfare
+            playUpgrade() {
+                if (!this.initialized) return;
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(260, now);
+                osc.frequency.setValueAtTime(440, now + 0.1);
+                osc.frequency.setValueAtTime(880, now + 0.2);
+
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.linearRampToValueAtTime(0.01, now + 0.35);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+
+                osc.start(now);
+                osc.stop(now + 0.35);
+            }
+        }
+
+        const audio = new SoundEngine();
+
+        // --- HISTORICAL & FUTURE ERAS DATA CONFIG ---
+        const ERAS = [
+            {
+                id: 1,
+                name: "ERA 1: WWI WARPLANE & DREADNOUGHTS",
+                targetScore: 1500,
+                color: "#eab308", // Vintage Gold
+                fireRate: 180,
+                playerSpeed: 5.5,
+                shipType: 'biplane',
+                shipName: 'Dreadnought',
+                bulletColor: '#fef08a'
+            },
+            {
+                id: 2,
+                name: "ERA 2: WWII FIGHTER & BATTLESHIPS",
+                targetScore: 3500,
+                color: "#c084fc", // Sky Blue
+                fireRate: 140,
+                playerSpeed: 6.5,
+                shipType: 'ww2',
+                shipName: 'Battleship',
+                bulletColor: '#c084fc'
+            },
+            {
+                id: 3,
+                name: "ERA 3: COLD WAR JET & DESTROYERS",
+                targetScore: 7000,
+                color: "#a855f7", // Neon Purple
+                fireRate: 100,
+                playerSpeed: 7.5,
+                shipType: 'jet',
+                shipName: 'Guided Destroyer',
+                bulletColor: '#c084fc'
+            },
+            {
+                id: 4,
+                name: "ERA 4: CYBER JET & PLASMA CARRIERS",
+                targetScore: Infinity,
+                color: "#a78bfa", // Neon Cyan
+                fireRate: 70,
+                playerSpeed: 8.5,
+                shipType: 'sci-fi',
+                shipName: 'Plasma Dread Carrier',
+                bulletColor: '#a78bfa'
+            }
+        ];
+
+        // --- CANVAS SETUP ---
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let width, height;
+        function resizeCanvas() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // --- GAME ENGINE STATE ---
+        let gameActive = false;
+        let score = 0;
+        let currentEraIndex = 0;
+        let shipsSunk = 0;
+        let lastShootTime = 0;
+        let missileAmmo = 5;
+        let lastMissileTime = 0;
+
+        // HUD Elements
+        const hud = document.getElementById('hud');
+        const startScreen = document.getElementById('startScreen');
+        const gameOverScreen = document.getElementById('gameOverScreen');
+        const hpBar = document.getElementById('hpBar');
+        const hpText = document.getElementById('hpText');
+        const missileCountText = document.getElementById('missileCount');
+        const btnMissileCount = document.getElementById('btnMissileCount');
+        const scoreDisplay = document.getElementById('scoreDisplay');
+        const shipsSunkText = document.getElementById('shipsSunkText');
+        const eraTitle = document.getElementById('eraTitle');
+        const eraProgressText = document.getElementById('eraProgressText');
+
+        // Keyboard Controls State
+        const keys = {
+            ArrowUp: false, ArrowDown: false, ArrowLeft: false, ArrowRight: false,
+            w: false, s: false, a: false, d: false,
+            Space: false, KeyE: false, ShiftLeft: false
+        };
+
+        let touchMoveDir = { x: 0, y: 0 };
+        let isTouchFiring = false;
+
+        window.addEventListener('keydown', e => {
+            if (e.code === 'Space') keys.Space = true;
+            if (e.code === 'KeyE' || e.key === 'Shift') firePlayerMissile();
+            if (keys.hasOwnProperty(e.key) || keys.hasOwnProperty(e.code)) {
+                keys[e.key] = true;
+                keys[e.code] = true;
+            }
+        });
+
+        window.addEventListener('keyup', e => {
+            if (e.code === 'Space') keys.Space = false;
+            if (keys.hasOwnProperty(e.key) || keys.hasOwnProperty(e.code)) {
+                keys[e.key] = false;
+                keys[e.code] = false;
+            }
+        });
+
+        // Touch Virtual Joystick Logic
+        const joystickZone = document.getElementById('joystickZone');
+        const joystickKnob = document.getElementById('joystickKnob');
+        let joystickActive = false;
+        let joystickCenter = { x: 0, y: 0 };
+
+        if (joystickZone) {
+            joystickZone.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                audio.init();
+                const rect = joystickZone.getBoundingClientRect();
+                joystickCenter = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+                joystickActive = true;
+                updateJoystick(e.touches[0]);
+            }, { passive: false });
+
+            window.addEventListener('touchmove', (e) => {
+                if (!joystickActive) return;
+                for (let touch of e.touches) {
+                    if (touch.target === joystickZone || joystickZone.contains(touch.target)) {
+                        updateJoystick(touch);
+                        break;
+                    }
+                }
+            }, { passive: false });
+
+            window.addEventListener('touchend', () => {
+                if (joystickActive) {
+                    joystickActive = false;
+                    touchMoveDir = { x: 0, y: 0 };
+                    joystickKnob.style.transform = `translate(0px, 0px)`;
+                }
+            });
+        }
+
+        function updateJoystick(touch) {
+            const dx = touch.clientX - joystickCenter.x;
+            const dy = touch.clientY - joystickCenter.y;
+            const dist = Math.hypot(dx, dy);
+            const maxRadius = 40;
+
+            const angle = Math.atan2(dy, dx);
+            const clampedDist = Math.min(dist, maxRadius);
+
+            const knobX = Math.cos(angle) * clampedDist;
+            const knobY = Math.sin(angle) * clampedDist;
+
+            joystickKnob.style.transform = `translate(${knobX}px, ${knobY}px)`;
+            touchMoveDir = { x: knobX / maxRadius, y: knobY / maxRadius };
+        }
+
+        // Mobile Touch Action Buttons
+        const btnFire = document.getElementById('btnFire');
+        const btnMissile = document.getElementById('btnMissile');
+
+        if (btnFire) {
+            btnFire.addEventListener('touchstart', (e) => { e.preventDefault(); isTouchFiring = true; audio.init(); }, { passive: false });
+            btnFire.addEventListener('touchend', () => { isTouchFiring = false; });
+        }
+        if (btnMissile) {
+            btnMissile.addEventListener('touchstart', (e) => { e.preventDefault(); firePlayerMissile(); audio.init(); }, { passive: false });
+        }
+
+        // --- GAME OBJECTS & CLASSES ---
+
+        // Ocean Waves & Cloud Particles Background
+        class OceanParticle {
+            constructor() {
+                this.reset(true);
+            }
+
+            reset(initial = false) {
+                this.x = Math.random() * width;
+                this.y = initial ? Math.random() * height : -50;
+                this.speed = Math.random() * 1.5 + 1;
+                this.length = Math.random() * 40 + 20;
+                this.opacity = Math.random() * 0.15 + 0.05;
+            }
+
+            update() {
+                this.y += this.speed;
+                if (this.y > height + 50) this.reset();
+            }
+
+            draw() {
+                ctx.save();
+                ctx.strokeStyle = `rgba(167, 139, 250, ${this.opacity})`;
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.moveTo(this.x, this.y);
+                ctx.lineTo(this.x, this.y + this.length);
+                ctx.stroke();
+                ctx.restore();
+            }
+        }
+
+        // Player Warplane
+        class Player {
+            constructor() {
+                this.width = 46;
+                this.height = 50;
+                this.x = width / 2;
+                this.y = height - 120;
+                this.hp = 100;
+                this.maxHp = 100;
+                this.tilt = 0;
+            }
+
+            update() {
+                const era = ERAS[currentEraIndex];
+                let speed = era.playerSpeed;
+
+                let dx = 0;
+                let dy = 0;
+
+                if (keys.ArrowLeft || keys.a) dx -= 1;
+                if (keys.ArrowRight || keys.d) dx += 1;
+                if (keys.ArrowUp || keys.w) dy -= 1;
+                if (keys.ArrowDown || keys.s) dy += 1;
+
+                if (joystickActive) {
+                    dx += touchMoveDir.x;
+                    dy += touchMoveDir.y;
+                }
+
+                const len = Math.hypot(dx, dy);
+                if (len > 0) {
+                    dx = (dx / len) * speed;
+                    dy = (dy / len) * speed;
+                }
+
+                this.x += dx;
+                this.y += dy;
+                this.tilt = dx * 3.5;
+
+                // Clamping
+                this.x = Math.max(this.width / 2, Math.min(width - this.width / 2, this.x));
+                this.y = Math.max(this.height / 2, Math.min(height - this.height / 2, this.y));
+            }
+
+            draw() {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate((this.tilt * Math.PI) / 180);
+
+                const era = ERAS[currentEraIndex];
+                ctx.shadowBlur = 12;
+                ctx.shadowColor = era.color;
+
+                switch (era.shipType) {
+                    case 'biplane':
+                        // Retro WWI Biplane Fighter
+                        ctx.fillStyle = '#d97706';
+                        ctx.fillRect(-5, -20, 10, 40);
+                        ctx.fillStyle = '#fef08a';
+                        ctx.fillRect(-26, -6, 52, 7);
+                        ctx.fillRect(-20, 6, 40, 6);
+                        ctx.fillStyle = '#78350f';
+                        ctx.fillRect(-8, 16, 16, 4);
+                        break;
+
+                    case 'ww2':
+                        // WWII Propeller Fighter
+                        ctx.fillStyle = '#7c3aed';
+                        ctx.beginPath();
+                        ctx.moveTo(0, -25);
+                        ctx.lineTo(8, -8);
+                        ctx.lineTo(24, 6);
+                        ctx.lineTo(22, 14);
+                        ctx.lineTo(6, 10);
+                        ctx.lineTo(0, 24);
+                        ctx.lineTo(-6, 10);
+                        ctx.lineTo(-22, 14);
+                        ctx.lineTo(-24, 6);
+                        ctx.lineTo(-8, -8);
+                        ctx.closePath();
+                        ctx.fill();
+                        break;
+
+                    case 'jet':
+                        // Modern Jet Fighter
+                        ctx.fillStyle = '#c026d3';
+                        ctx.beginPath();
+                        ctx.moveTo(0, -28);
+                        ctx.lineTo(6, -10);
+                        ctx.lineTo(22, 12);
+                        ctx.lineTo(8, 16);
+                        ctx.lineTo(0, 26);
+                        ctx.lineTo(-8, 16);
+                        ctx.lineTo(-22, 12);
+                        ctx.lineTo(-6, -10);
+                        ctx.closePath();
+                        ctx.fill();
+                        break;
+
+                    case 'sci-fi':
+                    default:
+                        // Futuristic Cyber Fighter
+                        ctx.fillStyle = '#a78bfa';
+                        ctx.beginPath();
+                        ctx.moveTo(0, -32);
+                        ctx.lineTo(10, -6);
+                        ctx.lineTo(26, 16);
+                        ctx.lineTo(12, 14);
+                        ctx.lineTo(0, 26);
+                        ctx.lineTo(-12, 14);
+                        ctx.lineTo(-26, 16);
+                        ctx.lineTo(-10, -6);
+                        ctx.closePath();
+                        ctx.fill();
+                        break;
+                }
+
+                // Thruster Flame
+                ctx.fillStyle = era.color;
+                ctx.beginPath();
+                ctx.moveTo(-5, 20);
+                ctx.lineTo(0, 30 + Math.random() * 8);
+                ctx.lineTo(5, 20);
+                ctx.closePath();
+                ctx.fill();
+
+                ctx.restore();
+            }
+        }
+
+        // Bullets & Heavy Anti-Air Missiles
+        class Bullet {
+            constructor(x, y, vx, vy, isEnemy = false, isMissile = false, color = '#fef08a') {
+                this.x = x;
+                this.y = y;
+                this.vx = vx;
+                this.vy = vy;
+                this.isEnemy = isEnemy;
+                this.isMissile = isMissile;
+                this.color = color;
+                this.radius = isMissile ? 5 : (isEnemy ? 4 : 3.5);
+            }
+
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+            }
+
+            draw() {
+                ctx.save();
+                ctx.shadowBlur = this.isMissile ? 12 : 6;
+                ctx.shadowColor = this.color;
+                ctx.fillStyle = this.color;
+
+                if (this.isMissile) {
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                    ctx.fill();
+                    // Missile Trail Particle
+                    particles.push(new Particle(this.x, this.y + 4, '#f59e0b', 2));
+                } else {
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                ctx.restore();
+            }
+        }
+
+        // Enemy Warplanes (Air Threat)
+        class EnemyWarplane {
+            constructor() {
+                this.width = 38;
+                this.height = 40;
+                this.x = Math.random() * (width - this.width) + this.width / 2;
+                this.y = -this.height;
+                this.speed = Math.random() * 2 + 2;
+                this.hp = 2;
+                this.shootTimer = Math.random() * 80 + 40;
+                this.color = '#ef4444';
+            }
+
+            update() {
+                this.y += this.speed;
+                this.shootTimer--;
+
+                if (this.shootTimer <= 0 && this.y > 0 && this.y < height - 200) {
+                    this.shootTimer = Math.random() * 100 + 70;
+                    bullets.push(new Bullet(this.x, this.y + 20, 0, 5, true, false, '#ef4444'));
+                }
+            }
+
+            draw() {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.moveTo(0, 20);
+                ctx.lineTo(-18, -12);
+                ctx.lineTo(0, -20);
+                ctx.lineTo(18, -12);
+                ctx.closePath();
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        // Enemy Naval Warships & Battleships (Sea Threat)
+        class Warship {
+            constructor() {
+                this.width = 75;
+                this.height = 160;
+                this.x = Math.random() * (width - this.width) + this.width / 2;
+                this.y = -this.height;
+                this.speed = 0.8;
+                this.hp = 12 + currentEraIndex * 6;
+                this.maxHp = this.hp;
+                this.aaFireTimer = Math.random() * 120 + 80;
+                this.color = '#475569'; // Steel Grey
+                this.name = ERAS[currentEraIndex].shipName;
+            }
+
+            update() {
+                this.y += this.speed;
+                this.aaFireTimer--;
+
+                // Fire Anti-Air SAM Missiles at Player
+                if (this.aaFireTimer <= 0 && this.y > 0 && this.y < height - 100) {
+                    this.aaFireTimer = Math.random() * 130 + 90;
+                    audio.playMissileLaunch();
+
+                    const angle = Math.atan2(player.y - this.y, player.x - this.x);
+                    const missileSpeed = 4.5;
+                    bullets.push(new Bullet(
+                        this.x,
+                        this.y,
+                        Math.cos(angle) * missileSpeed,
+                        Math.sin(angle) * missileSpeed,
+                        true,
+                        true,
+                        '#f97316'
+                    ));
+                }
+            }
+
+            draw() {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+
+                // Ocean Wake effect under Warship
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+                ctx.beginPath();
+                ctx.ellipse(0, 10, this.width / 1.6, this.height / 1.8, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Warship Steel Hull Silhouette
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.moveTo(0, -this.height / 2); // Bow / Front Nose
+                ctx.lineTo(this.width / 2, -this.height / 4);
+                ctx.lineTo(this.width / 2, this.height / 2); // Stern / Back
+                ctx.lineTo(-this.width / 2, this.height / 2);
+                ctx.lineTo(-this.width / 2, -this.height / 4);
+                ctx.closePath();
+                ctx.fill();
+                ctx.strokeStyle = '#94a3b8';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                // Deck Turrets
+                ctx.fillStyle = '#101326';
+                ctx.fillRect(-10, -30, 20, 25);
+                ctx.fillRect(-12, 10, 24, 30);
+
+                // Red Anti-Air Battery Indicators
+                ctx.fillStyle = '#ef4444';
+                ctx.beginPath();
+                ctx.arc(0, -10, 4, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Warship Health Bar
+                if (this.hp < this.maxHp) {
+                    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+                    ctx.fillRect(-30, -this.height / 2 - 12, 60, 6);
+                    ctx.fillStyle = '#ef4444';
+                    ctx.fillRect(-30, -this.height / 2 - 12, (this.hp / this.maxHp) * 60, 6);
+                }
+
+                ctx.restore();
+            }
+        }
+
+        // Particle Explosions & Damage Debris
+        class Particle {
+            constructor(x, y, color, size = 3) {
+                this.x = x;
+                this.y = y;
+                this.color = color;
+                this.radius = Math.random() * size + 1;
+                const angle = Math.random() * Math.PI * 2;
+                const speed = Math.random() * 4 + 1;
+                this.vx = Math.cos(angle) * speed;
+                this.vy = Math.sin(angle) * speed;
+                this.alpha = 1;
+                this.decay = Math.random() * 0.03 + 0.02;
+            }
+
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+                this.alpha -= this.decay;
+            }
+
+            draw() {
+                ctx.save();
+                ctx.globalAlpha = Math.max(0, this.alpha);
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        // Floating Damage Numbers Text Effect
+        class DamageText {
+            constructor(x, y, text, color = '#f59e0b') {
+                this.x = x;
+                this.y = y;
+                this.text = text;
+                this.color = color;
+                this.alpha = 1;
+                this.vy = -1.2;
+            }
+
+            update() {
+                this.y += this.vy;
+                this.alpha -= 0.025;
+            }
+
+            draw() {
+                ctx.save();
+                ctx.globalAlpha = Math.max(0, this.alpha);
+                ctx.font = 'bold 12px Orbitron';
+                ctx.fillStyle = this.color;
+                ctx.fillText(this.text, this.x, this.y);
+                ctx.restore();
+            }
+        }
+
+        // Game Collections
+        let player = new Player();
+        let oceanParticles = [];
+        let bullets = [];
+        let airEnemies = [];
+        let warships = [];
+        let particles = [];
+        let damageTexts = [];
+
+        let airSpawnTimer = 0;
+        let navalSpawnTimer = 0;
+
+        for (let i = 0; i < 30; i++) {
+            oceanParticles.push(new OceanParticle());
+        }
+
+        // --- SHOOTING & WEAPONS LOGIC ---
+        function handlePlayerShooting(timestamp) {
+            const era = ERAS[currentEraIndex];
+            const isFiring = keys.Space || isTouchFiring;
+
+            if (isFiring && timestamp - lastShootTime >= era.fireRate) {
+                lastShootTime = timestamp;
+                audio.playMachineGun();
+
+                const bSpeed = -12;
+                bullets.push(new Bullet(player.x - 10, player.y - 20, 0, bSpeed, false, false, era.bulletColor));
+                bullets.push(new Bullet(player.x + 10, player.y - 20, 0, bSpeed, false, false, era.bulletColor));
+            }
+        }
+
+        function firePlayerMissile() {
+            if (!gameActive || missileAmmo <= 0) return;
+            const now = Date.now();
+            if (now - lastMissileTime < 400) return; // Cooldown
+            
+            lastMissileTime = now;
+            missileAmmo--;
+            audio.playMissileLaunch();
+
+            // Heavy Tactical Rocket
+            bullets.push(new Bullet(player.x, player.y - 25, 0, -10, false, true, '#f59e0b'));
+            updateHUD();
+        }
+
+        function triggerExplosion(x, y, color = '#f97316', count = 20, isWarship = false) {
+            audio.playExplosion(isWarship);
+            for (let i = 0; i < count; i++) {
+                particles.push(new Particle(x, y, color, isWarship ? 5 : 3));
+            }
+
+            // Trigger Screen Shake
+            document.body.classList.remove('shake-screen');
+            void document.body.offsetWidth;
+            document.body.classList.add('shake-screen');
+            setTimeout(() => document.body.classList.remove('shake-screen'), 220);
+        }
+
+        // --- ERA PROGRESSION ---
+        function checkEraProgression() {
+            const currentEra = ERAS[currentEraIndex];
+            if (score >= currentEra.targetScore && currentEraIndex < ERAS.length - 1) {
+                currentEraIndex++;
+                audio.playUpgrade();
+
+                const newEra = ERAS[currentEraIndex];
+                eraTitle.textContent = newEra.name;
+                eraTitle.style.color = newEra.color;
+
+                if (newEra.targetScore !== Infinity) {
+                    eraProgressText.textContent = `NEXT ERA AT: ${newEra.targetScore.toLocaleString()} PTS`;
+                } else {
+                    eraProgressText.textContent = `MAXIMUM ERA REACHED`;
+                }
+
+                // Restore HP & Restock Missiles on Upgrade
+                player.hp = Math.min(player.maxHp, player.hp + 40);
+                missileAmmo = Math.min(10, missileAmmo + 4);
+                updateHUD();
+            }
+        }
+
+        function updateHUD() {
+            hpBar.style.width = `${Math.max(0, player.hp)}%`;
+            hpText.textContent = `${Math.ceil(Math.max(0, player.hp))}%`;
+
+            if (player.hp < 30) {
+                hpBar.className = "h-full bg-red-500 rounded transition-all duration-150";
+            } else {
+                hpBar.className = "h-full bg-gradient-to-r from-violet-500 via-fuchsia-400 to-emerald-400 rounded transition-all duration-150";
+            }
+
+            missileCountText.textContent = `${missileAmmo} / 10`;
+            if (btnMissileCount) btnMissileCount.textContent = missileAmmo;
+
+            scoreDisplay.textContent = score.toString().padStart(6, '0');
+            shipsSunkText.textContent = shipsSunk;
+        }
+
+        // --- MAIN GAME LOOP ---
+        function gameLoop(timestamp) {
+            if (!gameActive) return;
+
+            ctx.clearRect(0, 0, width, height);
+
+            // 1. Draw Ocean Water Surface Background
+            ctx.fillStyle = '#101326';
+            ctx.fillRect(0, 0, width, height);
+            oceanParticles.forEach(p => { p.update(); p.draw(); });
+
+            // 2. Spawn Naval Warships & Enemy Warplanes
+            airSpawnTimer++;
+            if (airSpawnTimer > Math.max(30, 80 - currentEraIndex * 12)) {
+                airSpawnTimer = 0;
+                airEnemies.push(new EnemyWarplane());
+            }
+
+            navalSpawnTimer++;
+            if (navalSpawnTimer > Math.max(180, 320 - currentEraIndex * 40)) {
+                navalSpawnTimer = 0;
+                warships.push(new Warship());
+            }
+
+            // 3. Update & Draw Warships (Sea Level)
+            for (let wIndex = warships.length - 1; wIndex >= 0; wIndex--) {
+                const ship = warships[wIndex];
+                ship.update();
+                ship.draw();
+
+                // Player Colliding with Warship
+                const distToPlayer = Math.hypot(ship.x - player.x, ship.y - player.y);
+                if (distToPlayer < (ship.width + player.width) / 2.5) {
+                    player.hp -= 30 * difficultyConfig().damage;
+                    triggerExplosion(player.x, player.y, '#ef4444', 25, true);
+                    warships.splice(wIndex, 1);
+                    updateHUD();
+                    if (player.hp <= 0) endGame();
+                    continue;
+                }
+
+                // Check Player Bullets / Missiles Hitting Warship
+                for (let bIndex = bullets.length - 1; bIndex >= 0; bIndex--) {
+                    const b = bullets[bIndex];
+                    if (!b.isEnemy) {
+                        if (Math.abs(b.x - ship.x) < ship.width / 2 && Math.abs(b.y - ship.y) < ship.height / 2) {
+                            const dmg = b.isMissile ? 6 : 1;
+                            ship.hp -= dmg;
+
+                            damageTexts.push(new DamageText(b.x, b.y, b.isMissile ? "-60" : "-10", b.isMissile ? "#f59e0b" : "#c084fc"));
+                            triggerExplosion(b.x, b.y, b.isMissile ? '#f59e0b' : '#c084fc', b.isMissile ? 12 : 4);
+                            bullets.splice(bIndex, 1);
+
+                            if (ship.hp <= 0) {
+                                shipsSunk++;
+                                score += 350;
+                                awardCredits(50);
+                                triggerExplosion(ship.x, ship.y, '#f97316', 35, true);
+                                warships.splice(wIndex, 1);
+                                checkEraProgression();
+                                updateHUD();
+                            }
+                            break;
+                        }
+                    }
+                }
+
+                if (ship.y > height + 200) warships.splice(wIndex, 1);
+            }
+
+            // 4. Update & Draw Enemy Warplanes (Air Level)
+            for (let eIndex = airEnemies.length - 1; eIndex >= 0; eIndex--) {
+                const enemy = airEnemies[eIndex];
+                enemy.update();
+                enemy.draw();
+
+                // Player Colliding with Air Enemy
+                const dist = Math.hypot(enemy.x - player.x, enemy.y - player.y);
+                if (dist < (enemy.width + player.width) / 2) {
+                    player.hp -= 20 * difficultyConfig().damage;
+                    triggerExplosion(enemy.x, enemy.y, '#ef4444', 15);
+                    airEnemies.splice(eIndex, 1);
+                    updateHUD();
+                    if (player.hp <= 0) endGame();
+                    continue;
+                }
+
+                // Player Bullets / Missiles Hitting Enemy Plane
+                for (let bIndex = bullets.length - 1; bIndex >= 0; bIndex--) {
+                    const b = bullets[bIndex];
+                    if (!b.isEnemy) {
+                        const distToBullet = Math.hypot(b.x - enemy.x, b.y - enemy.y);
+                        if (distToBullet < enemy.width / 2 + b.radius) {
+                            enemy.hp -= b.isMissile ? 4 : 1;
+                            bullets.splice(bIndex, 1);
+
+                            if (enemy.hp <= 0) {
+                                score += 80;
+                                awardCredits(15);
+                                triggerExplosion(enemy.x, enemy.y, '#ef4444', 15);
+                                airEnemies.splice(eIndex, 1);
+                                checkEraProgression();
+                                updateHUD();
+                            }
+                            break;
+                        }
+                    }
+                }
+
+                if (enemy.y > height + 60) airEnemies.splice(eIndex, 1);
+            }
+
+            // 5. Update & Draw Player
+            player.update();
+            player.draw();
+            handlePlayerShooting(timestamp);
+
+            // 6. Bullets Processing
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                const b = bullets[i];
+                b.update();
+                b.draw();
+
+                if (b.y < -30 || b.y > height + 30 || b.x < -30 || b.x > width + 30) {
+                    bullets.splice(i, 1);
+                    continue;
+                }
+
+                // Enemy Bullets / SAM Missiles Hitting Player
+                if (b.isEnemy) {
+                    const distToPlayer = Math.hypot(b.x - player.x, b.y - player.y);
+                    if (distToPlayer < player.width / 2.2) {
+                        const dmg = b.isMissile ? 22 : 8;
+                        player.hp -= dmg * difficultyConfig().damage;
+                        damageTexts.push(new DamageText(player.x, player.y - 20, `-${dmg}`, '#ef4444'));
+                        triggerExplosion(b.x, b.y, '#ef4444', b.isMissile ? 16 : 6);
+                        bullets.splice(i, 1);
+                        updateHUD();
+
+                        if (player.hp <= 0) endGame();
+                    }
+                }
+            }
+
+            // 7. Render Particles & Floating Damage Texts
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.update();
+                p.draw();
+                if (p.alpha <= 0) particles.splice(i, 1);
+            }
+
+            for (let i = damageTexts.length - 1; i >= 0; i--) {
+                const dt = damageTexts[i];
+                dt.update();
+                dt.draw();
+                if (dt.alpha <= 0) damageTexts.splice(i, 1);
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // --- START GAME FLOW ---
+        function startGame() {
+            audio.init();
+            score = 0;
+            currentEraIndex = 0;
+            shipsSunk = 0;
+            missileAmmo = 5;
+            bullets = [];
+            airEnemies = [];
+            warships = [];
+            particles = [];
+            damageTexts = [];
+
+            player = new Player();
+            gameActive = true;
+
+            const initialEra = ERAS[0];
+            eraTitle.textContent = initialEra.name;
+            eraTitle.style.color = initialEra.color;
+            eraProgressText.textContent = `NEXT ERA AT: ${initialEra.targetScore.toLocaleString()} PTS`;
+
+            startScreen.classList.add('hidden');
+            gameOverScreen.classList.add('hidden');
+            hud.classList.remove('hidden');
+
+            updateHUD();
+            requestAnimationFrame(gameLoop);
+        }
+
+        function endGame() {
+            gameActive = false;
+            document.getElementById('finalScore').textContent = score.toLocaleString();
+            document.getElementById('finalEra').textContent = ERAS[currentEraIndex].name;
+            document.getElementById('finalShipsSunk').textContent = shipsSunk;
+
+            hud.classList.add('hidden');
+            gameOverScreen.classList.remove('hidden');
+        }
+
+
+        // --- MK CREATIVE AGENCY: AIRCRAFT SHOP, CREDITS & DAILY REWARDS ---
+        const AIRCRAFT = [
+          {id:'scout',name:'Scout Biplane',price:0,hp:100,speed:5.5,fireRate:180,color:'#f59e0b',desc:'Balanced starter aircraft.'},
+          {id:'falcon',name:'Falcon Mk II',price:350,hp:115,speed:6.2,fireRate:155,color:'#c084fc',desc:'Faster handling and stronger hull.'},
+          {id:'raptor',name:'Raptor X',price:900,hp:130,speed:7.1,fireRate:125,color:'#a855f7',desc:'High-speed tactical jet.'},
+          {id:'phantom',name:'Phantom Stealth',price:1800,hp:145,speed:7.8,fireRate:100,color:'#a78bfa',desc:'Elite hull with rapid cannon fire.'},
+          {id:'titan',name:'Titan Interceptor',price:3000,hp:170,speed:7.4,fireRate:85,color:'#fb7185',desc:'Heavy prototype built for endurance.'}
+        ];
+        const PROFILE_KEY = 'mk_air_force_profile_v1';
+        const DAILY_BONUSES = [100,150,200,250,300,400,600];
+        function readProfile() {
+          try {
+            const s = JSON.parse(localStorage.getItem(PROFILE_KEY) || '{}');
+            return {coins:Math.max(0,Number(s.coins)||0),owned:Array.isArray(s.owned)?[...new Set(['scout',...s.owned])]:['scout'],
+              selected:typeof s.selected==='string'?s.selected:'scout',lastClaim:s.lastClaim||'',streak:Math.max(0,Number(s.streak)||0),bestScore:Math.max(0,Number(s.bestScore)||0)};
+          } catch(e) { return {coins:0,owned:['scout'],selected:'scout',lastClaim:'',streak:0,bestScore:0}; }
+        }
+        let profile = readProfile();
+        if (!profile.owned.includes(profile.selected)) profile.selected='scout';
+        function saveProfile(){try{localStorage.setItem(PROFILE_KEY,JSON.stringify(profile));}catch(e){}}
+        function selectedAircraft(){return AIRCRAFT.find(a=>a.id===profile.selected)||AIRCRAFT[0];}
+        function updateCoins(){['menuCoins','shopCoins','hudCoins'].forEach(id=>{const e=document.getElementById(id);if(e)e.textContent=profile.coins.toLocaleString();});}
+        function awardCredits(n){profile.coins+=n;saveProfile();updateCoins();toast(`+${n} CREDITS EARNED`);}
+        let toastTimer;
+        function toast(msg){let e=document.getElementById('mkToast');if(!e){e=document.createElement('div');e.id='mkToast';e.className='fixed top-5 left-1/2 -translate-x-1/2 z-[70] military-hud rounded-xl px-4 py-3 text-violet-200 font-orbitron text-xs';document.body.appendChild(e);}e.textContent=msg;e.classList.remove('hidden');clearTimeout(toastTimer);toastTimer=setTimeout(()=>e.classList.add('hidden'),1700);}
+        function showPanel(id){const e=document.getElementById(id);e.classList.remove('hidden');e.classList.add('flex');}
+        function hidePanel(id){const e=document.getElementById(id);e.classList.add('hidden');e.classList.remove('flex');}
+        function renderShop(){
+          const grid=document.getElementById('aircraftGrid');grid.innerHTML='';
+          AIRCRAFT.forEach(a=>{
+            const owned=profile.owned.includes(a.id),active=profile.selected===a.id;
+            const card=document.createElement('article');card.className='rounded-xl border p-4 bg-slate-950/80 '+(active?'border-violet-300':'border-slate-700');
+            card.innerHTML=`<div class="flex justify-between"><span class="text-[10px] font-orbitron" style="color:${a.color}">FIGHTER CLASS</span><span class="text-2xl">✈</span></div><h3 class="font-orbitron font-black text-white text-lg mt-3">${a.name}</h3><p class="text-slate-400 text-xs mt-1">${a.desc}</p><div class="grid grid-cols-3 gap-2 mt-3 text-[10px] text-slate-300"><div class="bg-slate-900 p-2 rounded">HULL<strong class="block text-violet-300 text-sm">${a.hp}</strong></div><div class="bg-slate-900 p-2 rounded">SPEED<strong class="block text-violet-300 text-sm">${a.speed}</strong></div><div class="bg-slate-900 p-2 rounded">FIRE<strong class="block text-violet-300 text-sm">${(1000/a.fireRate).toFixed(1)}/s</strong></div></div><div class="mt-4 text-amber-300 font-orbitron text-sm">${owned?'UNLOCKED':'🪙 '+a.price.toLocaleString()}</div><button data-aircraft="${a.id}" class="aircraftAction mt-3 w-full py-2 rounded-lg font-orbitron font-bold text-xs ${active?'bg-emerald-400 text-slate-950':'bg-violet-500 text-slate-950'}">${active?'✓ SELECTED':owned?'SELECT AIRCRAFT':'PURCHASE'}</button>`;
+            grid.appendChild(card);
+          });updateCoins();
+        }
+        function dateKey(date){return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;}
+        function renderRewards(){
+          const today=dateKey(new Date()),claimed=profile.lastClaim===today,grid=document.getElementById('rewardDays');grid.innerHTML='';
+          DAILY_BONUSES.forEach((amount,i)=>{const d=document.createElement('div');d.className='rounded-lg border p-2 text-center '+(i<profile.streak?'border-emerald-500/60 bg-emerald-950/50':'border-slate-700 bg-slate-900');d.innerHTML=`<div class="text-[9px] text-slate-400 font-orbitron">DAY ${i+1}</div><div class="text-lg">🎁</div><div class="text-[10px] text-amber-300 font-bold">${amount}</div>`;grid.appendChild(d);});
+          const reward=DAILY_BONUSES[profile.streak%7];document.getElementById('rewardStatus').textContent=claimed?'You have claimed today’s reward. Return tomorrow!':`Your next login bonus: ${reward} credits`;
+          const btn=document.getElementById('claimDaily');btn.disabled=claimed;btn.textContent=claimed?'REWARD CLAIMED TODAY':`CLAIM ${reward} CREDITS`;btn.classList.toggle('opacity-50',claimed);
+        }
+        document.getElementById('openShop').addEventListener('click',()=>{renderShop();showPanel('shopModal');});
+        document.getElementById('openRewards').addEventListener('click',()=>{renderRewards();showPanel('rewardsModal');});
+        document.querySelectorAll('.closePanel').forEach(b=>b.addEventListener('click',()=>hidePanel(b.dataset.panel)));
+        ['shopModal','rewardsModal'].forEach(id=>document.getElementById(id).addEventListener('click',e=>{if(e.target.id===id)hidePanel(id);}));
+        document.getElementById('aircraftGrid').addEventListener('click',e=>{
+          const b=e.target.closest('[data-aircraft]');if(!b)return;const a=AIRCRAFT.find(x=>x.id===b.dataset.aircraft);if(!a)return;
+          if(profile.owned.includes(a.id)){profile.selected=a.id;saveProfile();renderShop();toast(`${a.name} SELECTED`);return;}
+          if(profile.coins<a.price){toast(`NEED ${a.price-profile.coins} MORE CREDITS`);return;}
+          profile.coins-=a.price;profile.owned.push(a.id);profile.selected=a.id;saveProfile();renderShop();toast(`${a.name} UNLOCKED`);
+        });
+        document.getElementById('claimDaily').addEventListener('click',()=>{
+          const today=dateKey(new Date());if(profile.lastClaim===today)return;
+          const yesterday=dateKey(new Date(Date.now()-86400000));
+          profile.streak=profile.lastClaim===yesterday?(profile.streak+1)%7:0;
+          const amount=DAILY_BONUSES[profile.streak%7];profile.coins+=amount;profile.lastClaim=today;saveProfile();updateCoins();renderRewards();toast(`DAILY BONUS +${amount}`);
+        });
+
+        // Aircraft stats affect the player; era progression still controls enemy difficulty and visuals.
+        const BasePlayer = Player;
+        Player = class extends BasePlayer {
+          constructor(){super();const a=selectedAircraft();this.hp=this.maxHp=a.hp;this.width=46;this.height=50;}
+          update(){const era=ERAS[currentEraIndex],old=era.playerSpeed;era.playerSpeed=selectedAircraft().speed;try{super.update();}finally{era.playerSpeed=old;}}
+        };
+        const baseShoot = handlePlayerShooting;
+        handlePlayerShooting = function(timestamp){
+          const era=ERAS[currentEraIndex],rate=Math.min(era.fireRate,selectedAircraft().fireRate);
+          if((keys.Space||isTouchFiring)&&timestamp-lastShootTime>=rate){lastShootTime=timestamp;audio.playMachineGun();bullets.push(new Bullet(player.x-10,player.y-20,0,-12,false,false,era.bulletColor));bullets.push(new Bullet(player.x+10,player.y-20,0,-12,false,false,era.bulletColor));}
+        };
+        const baseStartGame = startGame;
+        startGame = function(){baseStartGame();player.hp=player.maxHp=selectedAircraft().hp;updateHUD();};
+        const pauseLayer=document.getElementById('pauseOverlay');
+        function pauseMission(){if(!gameActive)return;gameActive=false;pauseLayer.classList.remove('hidden');pauseLayer.classList.add('flex');}
+        function resumeMission(){if(gameActive)return;gameActive=true;pauseLayer.classList.add('hidden');pauseLayer.classList.remove('flex');requestAnimationFrame(gameLoop);}
+        document.getElementById('pauseGame').addEventListener('click',pauseMission);
+        document.getElementById('resumeGame').addEventListener('click',resumeMission);
+        document.getElementById('pauseToHangar').addEventListener('click',()=>{gameActive=false;pauseLayer.classList.add('hidden');pauseLayer.classList.remove('flex');hud.classList.add('hidden');startScreen.classList.remove('hidden');});
+        window.addEventListener('keydown',e=>{if(e.code==='Escape'){if(pauseLayer.classList.contains('hidden'))pauseMission();else resumeMission();}});
+        const baseEndGame=endGame;
+        endGame=function(){profile.bestScore=Math.max(profile.bestScore,score);saveProfile();baseEndGame();};
+        updateCoins();renderRewards();
+
+        document.getElementById('btnStart').addEventListener('click', startGame);
+        document.getElementById('btnRestart').addEventListener('click', startGame);
+
+    
+
+        // --- NEON FRONTIER EXPANSION PACK ---
+        const EXTRA_KEY = 'mk_air_force_extra_v2';
+        const EXTRA_DEFAULTS = { kills:0, bossesDefeated:0, missionsCompleted:0, shipsSunkTotal:0, totalCreditsEarned:0, runs:0, upgrades:{armor:0,engine:0,weapons:0}, achievements:[], sound:true, shake:true, reducedFx:false, difficulty:'normal', totalPlaySeconds:0 };
+        let extra = (()=>{try{const saved=JSON.parse(localStorage.getItem(EXTRA_KEY)||'{}');return {...EXTRA_DEFAULTS,...saved,upgrades:{...EXTRA_DEFAULTS.upgrades,...(saved.upgrades||{})}};}catch(e){return {...EXTRA_DEFAULTS,upgrades:{...EXTRA_DEFAULTS.upgrades}};}})();
+        function saveExtra(){try{localStorage.setItem(EXTRA_KEY,JSON.stringify(extra));}catch(e){}}
+        let runKills=0, runBosses=0, combo=0, lastKillAt=0, powerups=[], boss=null, bossSpawnScore=1800, missionIndex=0, missionProgress=0, missionDone=false, runStartAt=0, invulnerableUntil=0;
+        const MISSIONS=[
+          {text:'Destroy 10 enemy aircraft',target:10,type:'kills',reward:120},
+          {text:'Sink 2 warships',target:2,type:'ships',reward:180},
+          {text:'Reach 2,500 combat score',target:2500,type:'score',reward:220},
+          {text:'Defeat an elite boss',target:1,type:'boss',reward:350}
+        ];
+        const MEDALS=[
+          {id:'first_blood',title:'First Blood',desc:'Destroy your first enemy aircraft',test:()=>extra.kills>=1},
+          {id:'ace_pilot',title:'Ace Pilot',desc:'Destroy 50 enemy aircraft',test:()=>extra.kills>=50},
+          {id:'fleet_breaker',title:'Fleet Breaker',desc:'Sink 10 warships',test:()=>extra.shipsSunkTotal>=10},
+          {id:'boss_hunter',title:'Boss Hunter',desc:'Defeat 3 elite bosses',test:()=>extra.bossesDefeated>=3},
+          {id:'mission_ready',title:'Mission Specialist',desc:'Complete 5 objectives',test:()=>extra.missionsCompleted>=5},
+          {id:'high_roller',title:'High Roller',desc:'Earn 2,000 credits in total',test:()=>extra.totalCreditsEarned>=2000},
+          {id:'survivor',title:'Survivor',desc:'Reach 5,000 score in one run',test:()=>score>=5000}
+        ];
+        const UPGRADES=[
+          {id:'armor',name:'Reinforced Hull',desc:'+15 max health per level',base:250,max:5},
+          {id:'engine',name:'Vector Engine',desc:'+0.45 movement speed per level',base:300,max:5},
+          {id:'weapons',name:'Pulse Cannon',desc:'Faster cannon fire per level',base:350,max:5}
+        ];
+        function difficultyConfig(){return ({easy:{spawn:.78,damage:.65,enemyHp:.8,label:'CADET'},normal:{spawn:1,damage:1,enemyHp:1,label:'ACE'},hard:{spawn:1.25,damage:1.35,enemyHp:1.25,label:'VETERAN'}})[extra.difficulty]||{spawn:1,damage:1,enemyHp:1,label:'ACE'};}
+        function checkMedals(){let newly=[];MEDALS.forEach(m=>{if(!extra.achievements.includes(m.id)&&m.test()){extra.achievements.push(m.id);newly.push(m.title);}});if(newly.length){saveExtra();toast('MEDAL UNLOCKED: '+newly.join(', '));}}
+        function updateMissionUI(){const m=MISSIONS[missionIndex%MISSIONS.length];const text=document.getElementById('missionText'),bar=document.getElementById('missionBar');if(!text)return;text.textContent=missionDone?'OBJECTIVE COMPLETE — NEXT DEPLOYMENT':m.text;bar.style.width=(missionDone?100:Math.min(100,missionProgress/m.target*100))+'%';document.getElementById('comboText').textContent='x'+combo;document.getElementById('bossCount').textContent=extra.bossesDefeated;}
+        function progressMission(type,amount=1){if(missionDone)return;const m=MISSIONS[missionIndex%MISSIONS.length];if(m.type===type){missionProgress+=amount;if(missionProgress>=m.target){missionDone=true;extra.missionsCompleted++;profile.coins+=m.reward;saveProfile();saveExtra();updateCoins();toast('MISSION COMPLETE +'+m.reward+' CREDITS');checkMedals();setTimeout(()=>{missionIndex=(missionIndex+1)%MISSIONS.length;missionProgress=0;missionDone=false;updateMissionUI();},1300);}}updateMissionUI();}
+        function renderUpgrades(){const grid=document.getElementById('upgradeGrid');if(!grid)return;grid.innerHTML='';UPGRADES.forEach(u=>{const level=extra.upgrades[u.id]||0,price=u.base*(level+1);const card=document.createElement('div');card.className='rounded-lg border border-violet-400/30 bg-slate-950/80 p-3';card.innerHTML=`<div class="font-orbitron text-sm text-fuchsia-200">${u.name}</div><p class="text-slate-400 text-xs mt-1">${u.desc}</p><p class="text-amber-300 text-xs mt-2">LEVEL ${level}/${u.max} · ${level>=u.max?'MAX LEVEL':price+' CREDITS'}</p><button data-upgrade="${u.id}" class="mt-2 w-full rounded bg-violet-500 py-2 text-xs font-bold text-slate-950" ${level>=u.max?'disabled':''}>${level>=u.max?'MAXED':'UPGRADE'}</button>`;grid.appendChild(card);});}
+        function renderStats(){const grid=document.getElementById('statsGrid'),ach=document.getElementById('achievementGrid');if(!grid||!ach)return;const stats=[['BEST SCORE',profile.bestScore||0],['TOTAL KILLS',extra.kills],['BOSSES DEFEATED',extra.bossesDefeated],['WARSHIPS SUNK',extra.shipsSunkTotal],['MISSIONS COMPLETE',extra.missionsCompleted],['CREDITS EARNED',extra.totalCreditsEarned],['DEPLOYMENTS',extra.runs],['UPGRADES',Object.values(extra.upgrades).reduce((a,b)=>a+b,0)],['DIFFICULTY',difficultyConfig().label]];grid.innerHTML=stats.map(([a,b])=>`<div class="rounded-xl border border-violet-400/25 bg-slate-950/70 p-3"><div class="text-[9px] text-slate-400 font-orbitron">${a}</div><div class="text-xl text-fuchsia-200 font-orbitron mt-1">${b}</div></div>`).join('');ach.innerHTML=MEDALS.map(m=>{const unlocked=extra.achievements.includes(m.id);return `<div class="rounded-lg border ${unlocked?'border-amber-400/50 bg-amber-950/30':'border-slate-700 bg-slate-950/60'} p-3"><div class="font-orbitron text-sm ${unlocked?'text-amber-200':'text-slate-400'}">${unlocked?'🏅':'🔒'} ${m.title}</div><div class="text-xs text-slate-400 mt-1">${m.desc}</div></div>`}).join('');}
+        document.getElementById('openStats').addEventListener('click',()=>{renderStats();showPanel('statsModal');});
+        document.getElementById('openSettings').addEventListener('click',()=>showPanel('settingsModal'));
+        document.getElementById('difficultySelect').value=extra.difficulty;
+        document.getElementById('difficultySelect').addEventListener('change',e=>{extra.difficulty=e.target.value;saveExtra();toast('DIFFICULTY: '+difficultyConfig().label);});
+        document.getElementById('soundToggle').checked=extra.sound;
+        document.getElementById('shakeToggle').checked=extra.shake;
+        document.getElementById('reducedFxToggle').checked=extra.reducedFx;
+        document.getElementById('soundToggle').addEventListener('change',e=>{extra.sound=e.target.checked;saveExtra();});
+        document.getElementById('shakeToggle').addEventListener('change',e=>{extra.shake=e.target.checked;saveExtra();});
+        document.getElementById('reducedFxToggle').addEventListener('change',e=>{extra.reducedFx=e.target.checked;saveExtra();});
+        document.getElementById('aircraftGrid').addEventListener('click',e=>{const b=e.target.closest('[data-upgrade]');if(!b)return;const u=UPGRADES.find(x=>x.id===b.dataset.upgrade);if(!u)return;const level=extra.upgrades[u.id]||0,price=u.base*(level+1);if(level>=u.max){toast('MAX LEVEL REACHED');return;}if(profile.coins<price){toast('NEED '+(price-profile.coins)+' MORE CREDITS');return;}profile.coins-=price;extra.upgrades[u.id]=level+1;saveProfile();saveExtra();updateCoins();renderUpgrades();toast(u.name+' UPGRADED');});
+        const oldRenderShop=renderShop;renderShop=function(){oldRenderShop();renderUpgrades();};
+        const oldAwardCredits=awardCredits;awardCredits=function(n){extra.totalCreditsEarned+=n;oldAwardCredits(n);if(n===15){runKills++;extra.kills++;combo++;lastKillAt=Date.now();progressMission('kills');if(combo%5===0){profile.coins+=25;extra.totalCreditsEarned+=25;saveProfile();saveExtra();updateCoins();toast('COMBO BONUS +25 CREDITS');}}if(n===50){extra.shipsSunkTotal++;progressMission('ships');}checkMedals();};
+        const oldExplosion=triggerExplosion;triggerExplosion=function(...args){if(extra.shake){oldExplosion(...args);}else{const [x,y,color='#f97316',count=20,isWarship=false]=args;audio.playExplosion(isWarship);for(let i=0;i<(extra.reducedFx?Math.ceil(count*.35):count);i++)particles.push(new Particle(x,y,color,isWarship?5:3));}};
+        // Optional sound switch: sound methods become silent while preserving game logic.
+        ['playMachineGun','playMissileLaunch','playExplosion','playUpgrade'].forEach(method=>{if(typeof audio[method]==='function'){const original=audio[method].bind(audio);audio[method]=(...args)=>{if(extra.sound)return original(...args);};}});
+        // Elite boss: a large armored aircraft that enters periodically and drops a power-up.
+        class EliteBoss{constructor(){this.x=width/2;this.y=-70;this.w=112;this.h=68;this.hp=70+currentEraIndex*35;this.maxHp=this.hp;this.vx=2.1;this.age=0;this.fireTimer=0;}update(){this.age++;if(this.y<100)this.y+=1.4;this.x+=this.vx;if(this.x<this.w/2||this.x>width-this.w/2)this.vx*=-1;this.fireTimer++;if(this.fireTimer>75){this.fireTimer=0;const a=Math.atan2(player.y-this.y,player.x-this.x);bullets.push(new Bullet(this.x,this.y+24,Math.cos(a)*3.2,Math.sin(a)*3.2,true,true,'#fb7185'));}}draw(){ctx.save();ctx.translate(this.x,this.y);ctx.shadowBlur=18;ctx.shadowColor='#f43f5e';ctx.fillStyle='#881337';ctx.beginPath();ctx.moveTo(0,-34);ctx.lineTo(24,-8);ctx.lineTo(52,18);ctx.lineTo(22,14);ctx.lineTo(0,30);ctx.lineTo(-22,14);ctx.lineTo(-52,18);ctx.lineTo(-24,-8);ctx.closePath();ctx.fill();ctx.strokeStyle='#fda4af';ctx.lineWidth=2;ctx.stroke();ctx.fillStyle='#180b18';ctx.fillRect(-58,-49,116,7);ctx.fillStyle='#fb7185';ctx.fillRect(-58,-49,116*(this.hp/this.maxHp),7);ctx.fillStyle='#fff1f2';ctx.font='bold 10px Orbitron';ctx.textAlign='center';ctx.fillText('ELITE BOSS',0,-56);ctx.restore();}}
+        class PowerUp{constructor(){this.x=30+Math.random()*(width-60);this.y=-20;this.type=['repair','shield','overdrive','missile'][Math.floor(Math.random()*4)];this.r=13;this.v=2.2;}update(){this.y+=this.v;}draw(){const colors={repair:'#34d399',shield:'#60a5fa',overdrive:'#fbbf24',missile:'#e879f9'};ctx.save();ctx.shadowBlur=12;ctx.shadowColor=colors[this.type];ctx.fillStyle=colors[this.type];ctx.beginPath();ctx.arc(this.x,this.y,this.r,0,Math.PI*2);ctx.fill();ctx.fillStyle='#111827';ctx.font='bold 12px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(({repair:'+',shield:'S',overdrive:'⚡',missile:'M'})[this.type],this.x,this.y);ctx.restore();}}
+        // Enhance selected aircraft stats with permanent upgrades.
+        const UpgradedPlayer=Player;Player=class extends UpgradedPlayer{constructor(){super();const levels=extra.upgrades;this.maxHp+=levels.armor*15;this.hp=this.maxHp;}update(){const a=selectedAircraft(),old=a.speed;a.speed=old+extra.upgrades.engine*.45;try{super.update();}finally{a.speed=old;}}};
+        const oldFirePlayerMissile=firePlayerMissile;firePlayerMissile=function(){oldFirePlayerMissile();};
+        const oldEnhancedShoot=handlePlayerShooting;handlePlayerShooting=function(timestamp){const a=selectedAircraft(),old=a.fireRate;a.fireRate=Math.max(45,old-extra.upgrades.weapons*12);try{oldEnhancedShoot(timestamp);}finally{a.fireRate=old;}};
+        const oldStartGame=startGame;startGame=function(){extra.runs++;runKills=0;runBosses=0;combo=0;missionIndex=(extra.missionsCompleted%MISSIONS.length);missionProgress=0;missionDone=false;powerups=[];boss=null;bossSpawnScore=1800;runStartAt=Date.now();extra.difficulty=document.getElementById('difficultySelect').value||extra.difficulty;saveExtra();oldStartGame();player.hp=player.maxHp;updateHUD();updateMissionUI();document.getElementById('menuBestScore').textContent=(profile.bestScore||0).toLocaleString();};
+        // Game-loop extension: boss/power-up logic, combo rewards and difficulty scaling.
+        const originalGameLoop=gameLoop;
+        gameLoop=function(timestamp){
+          if(!gameActive){return;}
+          originalGameLoop(timestamp);
+          if(!gameActive){return;}
+          const diff=difficultyConfig();
+          // Spawn collectible power-ups and bosses based on combat progress.
+          if(Math.random()<(extra.reducedFx?0.0008:0.0015))powerups.push(new PowerUp());
+          if(!boss&&score>=bossSpawnScore){boss=new EliteBoss();bossSpawnScore+=2500;toast('WARNING: ELITE BOSS INBOUND');}
+          if(boss){boss.update();boss.draw();for(let i=bullets.length-1;i>=0;i--){const b=bullets[i];if(!b.isEnemy&&Math.abs(b.x-boss.x)<boss.w/2&&Math.abs(b.y-boss.y)<boss.h/2){boss.hp-=b.isMissile?12:2;bullets.splice(i,1);if(boss.hp<=0){triggerExplosion(boss.x,boss.y,'#fb7185',extra.reducedFx?14:40,true);score+=500;runBosses++;extra.bossesDefeated++;profile.coins+=150;saveProfile();saveExtra();updateCoins();progressMission('boss');checkMedals();boss=null;toast('ELITE BOSS DESTROYED +150 CREDITS');break;}}}if(boss&&Math.hypot(player.x-boss.x,player.y-boss.y)<48&&Date.now()>invulnerableUntil){player.hp-=20*diff.damage;invulnerableUntil=Date.now()+900;updateHUD();if(player.hp<=0)endGame();}}
+          for(let i=powerups.length-1;i>=0;i--){const p=powerups[i];p.update();p.draw();if(Math.hypot(player.x-p.x,player.y-p.y)<35){if(p.type==='repair'){player.hp=Math.min(player.maxHp,player.hp+30);toast('HULL REPAIRED +30');}else if(p.type==='shield'){invulnerableUntil=Date.now()+5000;toast('SHIELD ACTIVE 5 SEC');}else if(p.type==='overdrive'){lastShootTime=0;toast('OVERDRIVE PICKUP');}else{missileAmmo=Math.min(10,missileAmmo+3);toast('MISSILES +3');}powerups.splice(i,1);updateHUD();}else if(p.y>height+30)powerups.splice(i,1);}
+          // Increase pressure by difficulty without altering the original rendering loop.
+          if(diff.spawn>1&&Math.random()<(diff.spawn-1)*.012){airEnemies.push(new EnemyWarplane());}
+          if(diff.spawn<1&&Math.random()<(1-diff.spawn)*.01&&airEnemies.length>2)airEnemies.pop();
+          if(Date.now()-lastKillAt>3500)combo=0;
+          if(score>=2500)progressMission('score',2500);
+          if(gameActive){gameLoop._lastScore=score;updateMissionUI();}
+        };
+        const oldEndGame=endGame;endGame=function(){extra.totalPlaySeconds+=Math.max(0,Math.floor((Date.now()-runStartAt)/1000));checkMedals();saveExtra();oldEndGame();renderStats();};
+        // Difficulty also adjusts damage taken through a small periodic hull balancing hook.
+        const originalUpdateHUD=updateHUD;updateHUD=function(){originalUpdateHUD();const best=document.getElementById('menuBestScore');if(best)best.textContent=(profile.bestScore||0).toLocaleString();};
+        // Reinitialize feature views and save state.
+        updateCoins();renderUpgrades();renderStats();updateMissionUI();
+
+</script>
+    </main>
+</body>
+</html>
